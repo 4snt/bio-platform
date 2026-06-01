@@ -67,13 +67,6 @@ services:
   r-worker:
     build: ./r-worker
     env_file: .env
-    command: >
-      Rscript -e "
-        pkgs <- c('elastic', 'DBI', 'randomForest');
-        missing <- pkgs[!sapply(pkgs, requireNamespace, quietly=TRUE)];
-        if (length(missing) > 0) install.packages(missing, repos='https://cloud.r-project.org', quiet=TRUE);
-        source('worker.R')
-      "
     depends_on:
       postgres:
         condition: service_healthy
