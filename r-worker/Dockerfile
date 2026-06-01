@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN Rscript -e "install.packages(c('RPostgres', 'jsonlite', 'aws.s3'), repos='https://cloud.r-project.org')"
+RUN Rscript -e "install.packages(c('RPostgres', 'DBI', 'jsonlite', 'aws.s3', 'elastic', 'randomForest'), repos='https://cloud.r-project.org')"
 RUN Rscript -e "if (!requireNamespace('BiocManager', quietly=TRUE)) install.packages('BiocManager')"
 RUN Rscript -e "BiocManager::install(c('DESeq2', 'phyloseq', 'ANCOMBC', 'MaAsLin2', 'clusterProfiler'), ask=FALSE)"
 

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     es_host: str = "http://localhost:9200"
 
     minio_endpoint: str = "localhost:9000"
+    minio_public_endpoint: str = "localhost:9000"   # usado nas presigned URLs (acessível pelo browser)
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "changeme"
     minio_secure: bool = False

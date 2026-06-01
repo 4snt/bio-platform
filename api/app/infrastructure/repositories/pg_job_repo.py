@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 from app.core.database import get_pool
 from app.domain.pipeline.entities import PipelineJob, JobStatus
@@ -13,7 +14,7 @@ class PgJobRepository:
                 VALUES ($1, $2, $3, $4, $5)
                 """,
                 job.id, job.project_id, job.job_type,
-                job.status.value, job.payload,
+                job.status.value, json.dumps(job.payload),
             )
 
     async def list_by_project(self, project_id: UUID) -> list[dict]:

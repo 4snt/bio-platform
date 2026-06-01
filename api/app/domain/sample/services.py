@@ -21,9 +21,10 @@ class SampleParser:
         m = self._PATTERN.match(filename)
         if not m:
             raise ValueError(f"Nome de arquivo não reconhecido: {filename}")
+        replicate = int(re.search(r'B(\d+)', m.group("group")).group(1))
         return ParsedSampleName(
             project_code=ProjectCode(m.group("project")),
             treatment_group=m.group("group"),
-            replicate=1,
+            replicate=replicate,
             read_pair=m.group("pair"),
         )

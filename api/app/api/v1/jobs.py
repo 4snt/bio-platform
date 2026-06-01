@@ -1,14 +1,66 @@
+import json
 from uuid import UUID
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from pydantic import BaseModel
 from app.infrastructure.repositories.pg_job_repo import PgJobRepository
+from app.domain.pipeline.entities import PipelineJob
 
 router = APIRouter()
 repo = PgJobRepository()
 
+VALID_JOB_TYPES = {
+    "deseq2", "ancombc2", "maaslin2", "spieceasi",
+    "random_forest", "gsea", "funguild", "picrust2",
+}
+
+
+class EnqueueRequest(BaseModel):
+    project_id: UUID
+    job_type: str
+    payload: dict = {}
+
+
+@router.post("/enqueue")
+async def enqueue_job(body: EnqueueRequest):
+    if body.job_type not in VALID_JOB_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"job_type inválido. Valores aceitos: {sorted(VALID_JOB_TYPES)}",
+        )
+
+    job = PipelineJob(
+        project_id=body.project_id,
+        job_type=body.job_type,
+        payload=body.payload,
+    )
+
+    try:
+        await repo.enqueue(job)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao enfileirar job: {e}")
+
+    return {
+        "job_id": str(job.id),
+        "job_type": job.job_type,
+        "status": job.status.value,
+    }
+
 
 @router.get("/{project_id}")
 async def list_jobs(project_id: UUID):
-    return await repo.list_by_project(project_id)
+    jobs = await repo.list_by_project(project_id)
+    result = []
+    for j in jobs:
+        row = {}
+        for k, v in j.items():
+            if hasattr(v, 'isoformat'):
+                row[k] = v.isoformat()
+            elif isinstance(v, (int, float, bool, type(None))):
+                row[k] = v
+            else:
+                row[k] = str(v)
+        result.append(row)
+    return result
 
 
 @router.websocket("/ws/status")
