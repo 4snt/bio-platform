@@ -1,47 +1,41 @@
-"""Google OAuth id_token verification via the tokeninfo endpoint."""
+"""Google OAuth token verification via the userinfo endpoint."""
 import httpx
 
-TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
+USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 
-async def verify_google_token(id_token: str, client_id: str) -> dict:
-    """Validate a Google id_token and return the decoded claims.
+async def verify_google_token(access_token: str, client_id: str) -> dict:
+    """Validate a Google access_token and return user claims via the userinfo endpoint.
 
     Args:
-        id_token: The raw id_token string received from the frontend after
-                  the user completes the Google sign-in flow.
-        client_id: The OAuth 2.0 client ID that the token must be issued for.
+        access_token: The access_token from the Google OAuth flow.
+        client_id: Not used for userinfo validation, kept for API compatibility.
 
     Returns:
-        A dict with at least: sub, email, name, email_verified, picture.
+        A dict with at least: sub, email, name, email_verified.
 
     Raises:
-        ValueError: If the request fails, the token is invalid, the audience
-                    does not match, or the email is not verified.
+        ValueError: If the request fails, the token is invalid, or the email
+                    is not verified.
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(
-            TOKENINFO_URL,
-            params={"id_token": id_token},
+            USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
         )
 
     if response.status_code != 200:
         raise ValueError(
-            f"Google tokeninfo retornou status {response.status_code}: {response.text}"
+            f"Google userinfo retornou status {response.status_code}: {response.text}"
         )
 
     claims: dict = response.json()
 
-    # Validate audience (aud) to prevent token substitution attacks
-    aud = claims.get("aud", "")
-    if aud != client_id:
-        raise ValueError(
-            f"Token audience '{aud}' não corresponde ao client_id configurado."
-        )
+    if "error" in claims:
+        raise ValueError(f"Google userinfo erro: {claims['error']}")
 
-    # Validate that the email has been verified by Google
-    email_verified = claims.get("email_verified", "false")
-    if str(email_verified).lower() != "true":
+    email_verified = claims.get("email_verified", False)
+    if not email_verified:
         raise ValueError("Email do Google não verificado.")
 
     return claims

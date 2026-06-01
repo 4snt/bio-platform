@@ -6,6 +6,7 @@ from app.core.database import init_db_pool, close_db_pool
 from app.core.elasticsearch import init_es_client, close_es_client
 from app.core.minio import ensure_buckets
 from app.api.v1 import projects, samples, jobs, analysis, worker, auth, admin
+from app.core.config import settings
 
 
 @asynccontextmanager
@@ -24,9 +25,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

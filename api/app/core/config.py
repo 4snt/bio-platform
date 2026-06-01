@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     jwt_refresh_days: int = 7
     allowed_email_domain: str = "@ufvjm.edu.br"
 
+    # URLs públicas — usadas no CORS e nas presigned URLs expostas ao browser
+    # Ex: "https://api.meusite.com,http://localhost:3000"
+    cors_origins: str = "http://localhost:3000"
+
     @property
     def postgres_dsn(self) -> str:
         return (

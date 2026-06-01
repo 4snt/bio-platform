@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 class GoogleLoginRequest(BaseModel):
-    id_token: str
+    access_token: str
 
 
 class TokenResponse(BaseModel):
@@ -55,7 +55,7 @@ async def login_with_google(body: GoogleLoginRequest):
     """
     # Step 1 — validate with Google
     try:
-        claims = await verify_google_token(body.id_token, settings.google_client_id)
+        claims = await verify_google_token(body.access_token, settings.google_client_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

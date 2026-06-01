@@ -4,12 +4,20 @@ from app.domain.shared.value_objects import MarkerType, ProjectCode
 
 
 @dataclass
+class ProjectAnalysis:
+    analysis_type: str
+    charts: list[str]
+
+
+@dataclass
 class Project:
     code: ProjectCode
     name: str
     marker_type: MarkerType
     id: UUID = field(default_factory=uuid4)
     status: str = "active"
+    description: str = ""
+    analyses: list[ProjectAnalysis] = field(default_factory=list)
 
 
 @dataclass
