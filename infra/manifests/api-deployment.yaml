@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bio-api
+  namespace: bioinformatica
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bio-api
+  template:
+    metadata:
+      labels:
+        app: bio-api
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: agent-2
+      containers:
+        - name: bio-api
+          image: ghcr.io/org/bio-api:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: bio-platform-secrets
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bio-api
+  namespace: bioinformatica
+spec:
+  selector:
+    app: bio-api
+  ports:
+    - port: 8000
+      targetPort: 8000
