@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.core.database import init_db_pool, close_db_pool
 from app.core.elasticsearch import init_es_client, close_es_client
-from app.api.v1 import projects, samples, jobs, analysis
+from app.api.v1 import projects, samples, jobs, analysis, worker
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"]
 app.include_router(samples.router, prefix="/api/v1/samples", tags=["samples"])
 app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["jobs"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["analysis"])
+app.include_router(worker.router, prefix="/api/v1/worker", tags=["worker"])
 
 
 @app.get("/health")
