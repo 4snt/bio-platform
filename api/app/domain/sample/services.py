@@ -1,30 +1,64 @@
 import re
-from dataclasses import dataclass
-from app.domain.shared.value_objects import ProjectCode, MarkerType
+from dataclasses import dataclass, field
 
 
 @dataclass
 class ParsedSampleName:
-    project_code: ProjectCode
-    treatment_group: str
+    marker_type: str    # '16S' ou 'ITS'
+    sample_number: str  # '01', '51', etc.
+    treatment_group: str  # 'T1B2', 'T5B2_A', 'S51' para controles sem grupo
     replicate: int
-    read_pair: str
+    read_pair: str      # 'R1' ou 'R2'
 
 
 class SampleParser:
-    # e.g. INOVAHERB_T2B1_R1.fastq.gz
+    """
+    Suporta o formato Illumina real dos arquivos de sequenciamento:
+
+      {16S|ITS}[-]A[_]{número}[_{T\\d+B\\d+[_AB]}]_L{lane}_R{1|2}_{idx}.fastq[.gz]
+
+    Variantes presentes nos dados:
+      16S-A_01_T1B2_L001_R1_001.fastq.gz       → padrão
+      16S-A_02_T1B2_B_L001_R1_001.fastq.gz     → grupo com sub-réplica _B
+      16S-A04_T2B1_L001_R1_001.fastq.gz         → sem underscore entre A e número
+      16S-A_05_T5B2_A_L001_R1_001.fastq.gz     → sub-réplica _A
+      ITSA_02_T1B2_B_L001_R1_001.fastq.gz       → sem hífen (ITSA)
+      16S-A_51_L001_R1_001.fastq.gz             → sem grupo de tratamento (controle)
+    """
+
     _PATTERN = re.compile(
-        r"^(?P<project>[A-Z0-9]+)_(?P<group>T\d+B\d+)_(?P<pair>R[12])(?:_\d+)?\.fastq(?:\.gz)?$"
+        r'^(?P<marker>16S|ITS)-?A_?'          # 16S-A_ ou ITS-A_ ou ITSA_
+        r'(?P<sample>\d+)'                     # número da amostra
+        r'(?:_(?P<group>T\d+B\d+(?:_[AB])?))?'# grupo opcional: T1B2 ou T5B2_A
+        r'_L\d+_R(?P<pair>[12])_\d+'          # _L001_R1_001
+        r'\.fastq(?:\.gz)?$',                  # .fastq ou .fastq.gz
+        re.IGNORECASE,
     )
 
     def parse(self, filename: str) -> ParsedSampleName:
         m = self._PATTERN.match(filename)
         if not m:
-            raise ValueError(f"Nome de arquivo não reconhecido: {filename}")
-        replicate = int(re.search(r'B(\d+)', m.group("group")).group(1))
+            raise ValueError(
+                f"Nome de arquivo não reconhecido: '{filename}'. "
+                f"Formato esperado: 16S-A_01_T1B2_L001_R1_001.fastq.gz"
+            )
+
+        marker = m.group('marker').upper()
+        sample = m.group('sample')
+        group  = m.group('group')
+        pair   = m.group('pair')
+
+        if group:
+            b = re.search(r'B(\d+)', group)
+            replicate = int(b.group(1)) if b else int(sample)
+        else:
+            group = f'S{sample}'   # controle/branco sem grupo de tratamento
+            replicate = int(sample)
+
         return ParsedSampleName(
-            project_code=ProjectCode(m.group("project")),
-            treatment_group=m.group("group"),
+            marker_type=marker,
+            sample_number=sample,
+            treatment_group=group,
             replicate=replicate,
-            read_pair=m.group("pair"),
+            read_pair=f'R{pair}',
         )

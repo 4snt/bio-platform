@@ -7,15 +7,12 @@ from app.core.minio import generate_presigned_upload
 from app.domain.sample.services import SampleParser
 from app.domain.sample.entities import Sample
 from app.infrastructure.repositories.pg_sample_repo import PgSampleRepository
+from app.infrastructure.repositories.pg_project_repo import PgProjectRepository
 
 router = APIRouter()
-parser = SampleParser()
-repo = PgSampleRepository()
-
-
-class PresignedUploadRequest(BaseModel):
-    filename: str
-    project_id: UUID
+parser      = SampleParser()
+sample_repo = PgSampleRepository()
+project_repo = PgProjectRepository()
 
 
 class PresignedPairRequest(BaseModel):
@@ -30,60 +27,55 @@ class ConfirmPairRequest(BaseModel):
     r1_filename: str
 
 
-@router.post("/presigned-upload")
-async def get_presigned_upload(body: PresignedUploadRequest):
-    try:
-        parsed = parser.parse(body.filename)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    key = f"{parsed.project_code}/{body.filename}"
-    url = generate_presigned_upload("fastq-raw", key)
-    return {
-        "upload_url": url,
-        "key": key,
-        "expires_in": 3600,
-        "parsed": {
-            "project_code": str(parsed.project_code),
-            "treatment_group": parsed.treatment_group,
-            "replicate": parsed.replicate,
-            "read_pair": parsed.read_pair,
-        },
-    }
-
-
 @router.post("/presigned-pair")
 async def get_presigned_pair(body: PresignedPairRequest):
     filename = body.r1_filename
-    # Validate that filename ends with _R1.fastq.gz or _R1.fastq
-    if not re.search(r'_R1\.fastq(\.gz)?$', filename):
+
+    # Validação: deve ser um arquivo R1
+    if not re.search(r'_R1[_.]', filename):
         raise HTTPException(
             status_code=422,
-            detail="r1_filename deve terminar em _R1.fastq.gz ou _R1.fastq",
+            detail="Arquivo deve ser o R1 do par (deve conter _R1_ no nome).",
         )
 
+    # Parse do filename
     try:
         parsed = parser.parse(filename)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Derive R2 filename
-    r2_filename = re.sub(r'_R1(\.fastq(?:\.gz)?)$', r'_R2\1', filename)
+    # Busca projeto para validar marcador e obter code
+    project = await project_repo.get_by_id(body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    r1_key = f"{parsed.project_code}/{filename}"
-    r2_key = f"{parsed.project_code}/{r2_filename}"
+    if parsed.marker_type != project.marker_type.value:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Marcador do arquivo ({parsed.marker_type}) não corresponde "
+                f"ao projeto ({project.marker_type.value})."
+            ),
+        )
 
-    r1_url = generate_presigned_upload("fastq-raw", r1_key)
-    r2_url = generate_presigned_upload("fastq-raw", r2_key)
+    # Deriva R2
+    r2_filename = re.sub(r'_R1(_\d+\.fastq)', r'_R2\1', filename)
+    if r2_filename == filename:
+        r2_filename = re.sub(r'_R1(\.fastq)', r'_R2\1', filename)
+
+    # Monta chaves no MinIO usando o code do projeto
+    r1_key = f"{project.code}/{filename}"
+    r2_key = f"{project.code}/{r2_filename}"
 
     return {
-        "r1": {"upload_url": r1_url, "key": r1_key},
-        "r2": {"upload_url": r2_url, "key": r2_key},
+        "r1": {"upload_url": generate_presigned_upload("fastq-raw", r1_key), "key": r1_key},
+        "r2": {"upload_url": generate_presigned_upload("fastq-raw", r2_key), "key": r2_key},
         "parsed": {
-            "project_code": str(parsed.project_code),
+            "marker_type":     parsed.marker_type,
+            "sample_number":   parsed.sample_number,
             "treatment_group": parsed.treatment_group,
-            "replicate": parsed.replicate,
-            "read_pair": parsed.read_pair,
+            "replicate":       parsed.replicate,
+            "read_pair":       parsed.read_pair,
         },
     }
 
@@ -105,21 +97,20 @@ async def confirm_pair(body: ConfirmPairRequest):
     )
 
     try:
-        await repo.save(sample)
+        await sample_repo.save(sample)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao salvar amostra: {e}")
 
     return {
-        "sample_id": str(sample.id),
+        "sample_id":       str(sample.id),
         "treatment_group": sample.treatment_group,
-        "replicate": sample.replicate,
+        "replicate":       sample.replicate,
     }
 
 
 @router.get("/{project_id}")
 async def list_samples(project_id: UUID):
-    samples = await repo.list_by_project(project_id)
-    # Serialize UUIDs and datetimes to strings
+    samples = await sample_repo.list_by_project(project_id)
     result = []
     for s in samples:
         row = {}
