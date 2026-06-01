@@ -22,7 +22,9 @@ services:
 
   # ── Banco de dados ──────────────────────────────────────────────
   postgres:
-    image: postgres:16
+    build:
+      context: https://github.com/4snt/bio-platform.git#main:db
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_DB:       ${POSTGRES_DB:-bioinformatica}
@@ -30,7 +32,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-api_user} -d ${POSTGRES_DB:-bioinformatica}"]
       interval: 5s
@@ -80,7 +81,7 @@ services:
   # ── FastAPI ─────────────────────────────────────────────────────
   api:
     build:
-      context: ./api
+      context: https://github.com/4snt/bio-platform.git#main:api
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
@@ -127,7 +128,7 @@ services:
   # ── R Worker ────────────────────────────────────────────────────
   r-worker:
     build:
-      context: ./r-worker
+      context: https://github.com/4snt/bio-platform.git#main:r-worker
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -153,7 +154,7 @@ services:
   # ── Frontend Next.js ────────────────────────────────────────────
   frontend:
     build:
-      context: ./frontend
+      context: https://github.com/4snt/bio-platform.git#main:frontend
       dockerfile: Dockerfile
       args:
         # ATENÇÃO: estas variáveis ficam embutidas no bundle JS — devem ser
