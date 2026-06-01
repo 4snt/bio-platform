@@ -15,6 +15,11 @@ sample_repo = PgSampleRepository()
 project_repo = PgProjectRepository()
 
 
+class ArtifactUploadRequest(BaseModel):
+    filename: str   # ex: "phyloseq.rds" ou "phyloseq_fungi.rds"
+    project_id: UUID
+
+
 class PresignedPairRequest(BaseModel):
     r1_filename: str
     project_id: UUID
@@ -105,6 +110,26 @@ async def confirm_pair(body: ConfirmPairRequest):
         "sample_id":       str(sample.id),
         "treatment_group": sample.treatment_group,
         "replicate":       sample.replicate,
+    }
+
+
+@router.post("/artifact-upload-url")
+async def artifact_upload_url(body: ArtifactUploadRequest):
+    """Gera presigned URL para upload de arquivo .rds para o bucket pipeline-artifacts."""
+    if not body.filename.endswith(".rds"):
+        raise HTTPException(status_code=422, detail="Apenas arquivos .rds são aceitos.")
+
+    project = await project_repo.get_by_id(body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    key = f"{project.code}/{body.filename}"
+    url = generate_presigned_upload("pipeline-artifacts", key)
+    return {
+        "upload_url": url,
+        "key": f"pipeline-artifacts/{key}",
+        "bucket": "pipeline-artifacts",
+        "object_key": key,
     }
 
 
