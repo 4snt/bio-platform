@@ -125,6 +125,7 @@ services:
       - "${FRONTEND_PORT:-3005}:3000"
     environment:
       NODE_ENV:            production
+      HOSTNAME:            "0.0.0.0"
       NEXTAUTH_URL:        ${NEXTAUTH_URL:-http://localhost:3005}
       AUTH_SECRET:         ${AUTH_SECRET}
       NEXTAUTH_SECRET:     ${AUTH_SECRET}
