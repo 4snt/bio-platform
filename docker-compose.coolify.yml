@@ -23,7 +23,7 @@ services:
   # ── Banco de dados ──────────────────────────────────────────────
   postgres:
     build:
-      context: https://github.com/4snt/bio-platform.git#main:db
+      context: https://github.com/4snt/bio-platform.git#master:db
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -81,7 +81,7 @@ services:
   # ── FastAPI ─────────────────────────────────────────────────────
   api:
     build:
-      context: https://github.com/4snt/bio-platform.git#main:api
+      context: https://github.com/4snt/bio-platform.git#master:api
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
@@ -128,7 +128,7 @@ services:
   # ── R Worker ────────────────────────────────────────────────────
   r-worker:
     build:
-      context: https://github.com/4snt/bio-platform.git#main:r-worker
+      context: https://github.com/4snt/bio-platform.git#master:r-worker
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
@@ -154,7 +154,7 @@ services:
   # ── Frontend Next.js ────────────────────────────────────────────
   frontend:
     build:
-      context: https://github.com/4snt/bio-platform.git#main:frontend
+      context: https://github.com/4snt/bio-platform.git#master:frontend
       dockerfile: Dockerfile
       args:
         # ATENÇÃO: estas variáveis ficam embutidas no bundle JS — devem ser
