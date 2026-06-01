@@ -47,6 +47,20 @@ def generate_presigned_download(bucket: str, key: str, expires: int = 3600) -> s
     return _rewrite_to_public(url)
 
 
+def list_objects(bucket: str, prefix: str = "") -> list[str]:
+    """Lista objetos num bucket com prefixo opcional. Retorna lista de keys."""
+    client = get_minio_client()
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        keys = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                keys.append(obj["Key"])
+        return keys
+    except Exception:
+        return []
+
+
 REQUIRED_BUCKETS = ["fastq-raw", "fastq-qc", "pipeline-artifacts", "results", "figures", "references"]
 
 

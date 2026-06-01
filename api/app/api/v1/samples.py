@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.core.minio import generate_presigned_upload
+from app.core.minio import generate_presigned_upload, list_objects
 from app.domain.sample.services import SampleParser
 from app.domain.sample.entities import Sample
 from app.infrastructure.repositories.pg_sample_repo import PgSampleRepository
@@ -105,6 +105,26 @@ async def confirm_pair(body: ConfirmPairRequest):
         "sample_id":       str(sample.id),
         "treatment_group": sample.treatment_group,
         "replicate":       sample.replicate,
+    }
+
+
+@router.get("/{project_id}/artifacts")
+async def list_artifacts(project_id: UUID):
+    """Lista artefatos disponíveis no MinIO para o projeto (phyloseq.rds, etc.)."""
+    project = await project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    prefix = f"{project.code}/"
+    keys   = list_objects("pipeline-artifacts", prefix)
+
+    # Caminho padrão que o QIIME2 vai gerar
+    default_key = f"pipeline-artifacts/{project.code}/phyloseq.rds"
+
+    return {
+        "default_key": default_key,
+        "available":   [f"pipeline-artifacts/{k}" for k in keys],
+        "project_code": str(project.code),
     }
 
 
