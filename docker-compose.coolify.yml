@@ -79,7 +79,7 @@ services:
       MINIO_SECURE:          ${MINIO_SECURE:-false}
       GOOGLE_CLIENT_ID:      ${GOOGLE_CLIENT_ID}
       JWT_SECRET:            ${JWT_SECRET}
-      ALLOWED_EMAIL_DOMAIN:  ${ALLOWED_EMAIL_DOMAIN:-@ufvjm.edu.br}
+      ALLOWED_EMAIL_DOMAIN:  "${ALLOWED_EMAIL_DOMAIN:-@ufvjm.edu.br}"
       JWT_ACCESS_MINUTES:    ${JWT_ACCESS_MINUTES:-60}
       CORS_ORIGINS:          ${CORS_ORIGINS:-http://localhost:3005}
       LOG_LEVEL:             ${LOG_LEVEL:-info}
@@ -131,7 +131,8 @@ services:
       NEXTAUTH_SECRET:     ${AUTH_SECRET}
       GOOGLE_CLIENT_ID:    ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      API_URL:             http://api:8000
+      API_URL:              http://api:8000
+      ALLOWED_EMAIL_DOMAIN: "${ALLOWED_EMAIL_DOMAIN:-@ufvjm.edu.br}"
     depends_on:
       - api
     networks:

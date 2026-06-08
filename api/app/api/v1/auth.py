@@ -43,9 +43,7 @@ class MeResponse(BaseModel):
 
 @router.post("/google", response_model=TokenResponse)
 async def login_with_google(body: GoogleLoginRequest):
-    """Exchange a Google id_token for a platform JWT."""
-    import logging as _log
-    _log.getLogger("uvicorn.error").warning("AUTH ENTER token_len=%d", len(body.access_token))
+    """Exchange a Google access_token for a platform JWT."""
     # Step 1 — validate with Google
     try:
         claims = await verify_google_token(body.access_token, settings.google_client_id)
@@ -63,19 +61,19 @@ async def login_with_google(body: GoogleLoginRequest):
     if not email.endswith(settings.allowed_email_domain):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"[DBG] domain: email={email!r} required={settings.allowed_email_domain!r}",
+            detail=f"Apenas contas {settings.allowed_email_domain} são permitidas.",
         )
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Step 3 — bootstrap check
+        # Step 3 — bootstrap: first user ever becomes admin automatically
         user_count: int = await conn.fetchval("SELECT COUNT(*) FROM users")
         is_bootstrap = user_count == 0
 
         if is_bootstrap:
             role = "admin"
         else:
-            # Step 4 — existing user or pending invite
+            # Step 4 — existing user re-authenticating, or new user with invite
             existing_user = await conn.fetchrow(
                 "SELECT role FROM users WHERE email = $1",
                 email,
@@ -95,7 +93,7 @@ async def login_with_google(body: GoogleLoginRequest):
                 if invite is None:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"[DBG] no-invite: email={email!r} existing={existing_user is not None}",
+                        detail="Acesso negado. Solicite um convite ao administrador.",
                     )
                 role = invite["role"]
 
@@ -119,10 +117,10 @@ async def login_with_google(body: GoogleLoginRequest):
         if not user["is_active"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"[DBG] inactive: email={email!r}",
+                detail="Conta desativada. Contate o administrador.",
             )
 
-        # Step 6 — mark invite as used (only for new users arriving via invite)
+        # Step 6 — mark invite as used (only for brand-new users via invite)
         if not is_bootstrap and not existing_user:
             await conn.execute(
                 """

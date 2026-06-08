@@ -18,7 +18,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     authorized({ auth: session, request }) {
       const path = request.nextUrl.pathname
       const isPublic = path.startsWith("/login") || path.startsWith("/api/auth")
-      console.log("[MW] path=%s isPublic=%s session=%s", path, isPublic, session ? JSON.stringify({ role: (session as any).role, error: (session as any).error, email: (session as any).userEmail }) : null)
       if (!session && !isPublic) return false
       if (path.startsWith("/admin") && (session as any)?.role !== "admin") {
         return Response.redirect(new URL("/", request.url))
@@ -42,8 +41,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.userEmail   = data.email
           token.userName    = data.name
         } else {
-          const errBody = await res.json().catch(() => ({}))
-          console.error(`[auth] backend ${res.status}:`, JSON.stringify(errBody))
           token.error = res.status === 403 ? "NotInvited" : "AuthError"
         }
       }
