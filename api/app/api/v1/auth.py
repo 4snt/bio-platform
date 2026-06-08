@@ -82,22 +82,29 @@ async def login_with_google(body: GoogleLoginRequest):
         if is_bootstrap:
             role = "admin"
         else:
-            # Step 4 — invite check
-            invite = await conn.fetchrow(
-                """
-                SELECT id, role
-                FROM invited_users
-                WHERE email = $1
-                  AND used_at IS NULL
-                """,
+            # Step 4 — existing user or pending invite
+            existing_user = await conn.fetchrow(
+                "SELECT role FROM users WHERE email = $1",
                 email,
             )
-            if invite is None:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Acesso negado. Solicite um convite ao administrador.",
+            if existing_user:
+                role = existing_user["role"]
+            else:
+                invite = await conn.fetchrow(
+                    """
+                    SELECT id, role
+                    FROM invited_users
+                    WHERE email = $1
+                      AND used_at IS NULL
+                    """,
+                    email,
                 )
-            role = invite["role"]
+                if invite is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Acesso negado. Solicite um convite ao administrador.",
+                    )
+                role = invite["role"]
 
         # Step 5 — upsert user
         user = await conn.fetchrow(
@@ -122,8 +129,8 @@ async def login_with_google(body: GoogleLoginRequest):
                 detail="Conta desativada. Contate o administrador.",
             )
 
-        # Step 6 — mark invite as used (no-op for bootstrap)
-        if not is_bootstrap:
+        # Step 6 — mark invite as used (only for new users arriving via invite)
+        if not is_bootstrap and not existing_user:
             await conn.execute(
                 """
                 UPDATE invited_users
