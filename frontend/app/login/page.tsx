@@ -1,6 +1,6 @@
 'use client'
 
-import { signIn } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 
@@ -34,6 +34,27 @@ function ErrorMessage({ error }: { error: string | null }) {
 function LoginContent() {
   const params = useSearchParams()
   const error  = params.get("error")
+  const router = useRouter()
+
+  const handleSignIn = () => {
+    const w    = 500
+    const h    = 620
+    const left = Math.round(window.screenX + (window.outerWidth  - w) / 2)
+    const top  = Math.round(window.screenY + (window.outerHeight - h) / 2)
+
+    const popup = window.open(
+      "/api/auth/signin/google",
+      "google-signin",
+      `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,scrollbars=0`,
+    )
+
+    const timer = setInterval(() => {
+      if (!popup || popup.closed) {
+        clearInterval(timer)
+        router.push("/")
+      }
+    }, 500)
+  }
 
   return (
     <div style={{
@@ -92,7 +113,7 @@ function LoginContent() {
 
         {/* Google sign-in button */}
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={handleSignIn}
           style={{
             display: "flex",
             alignItems: "center",
