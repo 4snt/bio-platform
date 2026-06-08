@@ -67,8 +67,7 @@ async def login_with_google(body: GoogleLoginRequest):
     google_sub: str = claims.get("sub", "")
 
     # Step 2 — domain check
-    import logging
-    logging.warning("AUTH attempt: email=%s domain_required=%s match=%s", email, settings.allowed_email_domain, email.endswith(settings.allowed_email_domain))
+    print(f"AUTH DEBUG: email={email!r} domain={settings.allowed_email_domain!r} match={email.endswith(settings.allowed_email_domain)}", flush=True)
     if not email.endswith(settings.allowed_email_domain):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

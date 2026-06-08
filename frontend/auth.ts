@@ -32,6 +32,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.userEmail   = data.email
           token.userName    = data.name
         } else {
+          const errBody = await res.json().catch(() => ({}))
+          console.error(`[auth] backend ${res.status}:`, JSON.stringify(errBody))
           token.error = res.status === 403 ? "NotInvited" : "AuthError"
         }
       }
