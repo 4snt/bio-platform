@@ -1,5 +1,6 @@
 'use client'
 
+import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
@@ -48,8 +49,14 @@ function LoginContent() {
       `width=${w},height=${h},left=${left},top=${top},toolbar=0,menubar=0,location=0,scrollbars=0`,
     )
 
+    // Popup bloqueado pelo browser — faz redirect normal
+    if (!popup || popup.closed) {
+      signIn("google", { callbackUrl: "/" })
+      return
+    }
+
     const timer = setInterval(() => {
-      if (!popup || popup.closed) {
+      if (popup.closed) {
         clearInterval(timer)
         router.push("/")
       }
