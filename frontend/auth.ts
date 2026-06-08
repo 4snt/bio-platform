@@ -5,6 +5,7 @@ const API = process.env.API_URL ?? "http://localhost:8000"
 const ALLOWED_DOMAIN = "@ufvjm.edu.br"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,

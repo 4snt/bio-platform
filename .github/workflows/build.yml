@@ -51,3 +51,13 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:latest
           build-args: ${{ matrix.build_args }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Coolify deploy
+        run: |
+          curl -fSs -X GET \
+            "http://coolify.flipafile.com/api/v1/deploy?uuid=qoeswt6ssct46bv4l7nwlxnn&force=false" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
