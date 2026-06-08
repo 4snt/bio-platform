@@ -2,7 +2,8 @@ import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 
 const API = process.env.API_URL ?? "http://localhost:8000"
-const ALLOWED_DOMAIN = "@ufvjm.edu.br"
+const ALLOWED_DOMAIN = process.env.ALLOWED_EMAIL_DOMAIN ?? "@ufvjm.edu.br"
+const ALLOWED_HD = ALLOWED_DOMAIN.replace("@", "")
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -10,7 +11,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: { params: { hd: "ufvjm.edu.br" } },
+      authorization: { params: { hd: ALLOWED_HD } },
     }),
   ],
   callbacks: {
@@ -46,6 +47,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   pages: { signIn: "/login", error: "/login" },
-  // NextAuth v5 usa AUTH_SECRET; fallback para NEXTAUTH_SECRET por compatibilidade
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
 })
