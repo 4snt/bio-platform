@@ -1,23 +1,18 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getToken } from "next-auth/jwt"
+import { auth } from "./auth"
+import { NextResponse } from "next/server"
 
-export async function middleware(req: NextRequest) {
-  const token = await getToken({
-    req,
-    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  })
-
+export const middleware = auth((req) => {
   const path = req.nextUrl.pathname
   const isPublic = path.startsWith("/login") || path.startsWith("/api/auth")
 
-  if (!token && !isPublic) {
+  if (!req.auth && !isPublic) {
     return NextResponse.redirect(new URL("/login", req.url))
   }
 
-  if (path.startsWith("/admin") && token?.role !== "admin") {
+  if (path.startsWith("/admin") && (req.auth as any)?.role !== "admin") {
     return NextResponse.redirect(new URL("/", req.url))
   }
-}
+})
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
