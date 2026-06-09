@@ -1,6 +1,7 @@
 source("utils/pg_helpers.R")
 source("utils/es_helpers.R")
 source("utils/pg_storage.R")
+source("utils/ncbi_taxonomy.R")
 source("analyses/deseq2.R")
 source("analyses/ancombc.R")
 source("analyses/maaslin2.R")

@@ -8,7 +8,14 @@ class PgProjectRepository:
     async def get_all(self) -> list[Project]:
         pool = get_pool()
         async with pool.acquire() as conn:
-            rows = await conn.fetch("SELECT * FROM projects ORDER BY created_at DESC")
+            rows = await conn.fetch(
+                """
+                SELECT p.*, u.name AS author_name, u.avatar_url AS author_avatar_url
+                FROM projects p
+                LEFT JOIN users u ON u.id = p.created_by
+                ORDER BY p.created_at DESC
+                """
+            )
             project_ids = [r["id"] for r in rows]
             analyses_rows = []
             if project_ids:
@@ -27,7 +34,15 @@ class PgProjectRepository:
     async def get_by_id(self, project_id: UUID) -> Project | None:
         pool = get_pool()
         async with pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT * FROM projects WHERE id = $1", project_id)
+            row = await conn.fetchrow(
+                """
+                SELECT p.*, u.name AS author_name, u.avatar_url AS author_avatar_url
+                FROM projects p
+                LEFT JOIN users u ON u.id = p.created_by
+                WHERE p.id = $1
+                """,
+                project_id,
+            )
             if not row:
                 return None
             analyses_rows = await conn.fetch(
@@ -46,15 +61,17 @@ class PgProjectRepository:
             async with conn.transaction():
                 await conn.execute(
                     """
-                    INSERT INTO projects (id, code, name, description, marker_type, status)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO projects (id, code, name, description, marker_type, status, bioproject_accession, created_by)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (id) DO UPDATE
-                        SET name        = EXCLUDED.name,
-                            description = EXCLUDED.description,
-                            status      = EXCLUDED.status
+                        SET name                 = EXCLUDED.name,
+                            description          = EXCLUDED.description,
+                            status               = EXCLUDED.status,
+                            bioproject_accession = EXCLUDED.bioproject_accession
                     """,
                     project.id, str(project.code), project.name,
                     project.description, project.marker_type.value, project.status,
+                    project.bioproject_accession, project.created_by,
                 )
                 # Replace all analyses for this project
                 await conn.execute(
@@ -78,5 +95,9 @@ class PgProjectRepository:
             description=row.get("description") or "",
             marker_type=MarkerType(row["marker_type"]),
             status=row["status"],
+            bioproject_accession=row.get("bioproject_accession"),
+            created_by=row.get("created_by"),
+            author_name=row.get("author_name"),
+            author_avatar_url=row.get("author_avatar_url"),
             analyses=analyses,
         )

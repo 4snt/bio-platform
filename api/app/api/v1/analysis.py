@@ -1,8 +1,10 @@
 import json
 from uuid import UUID
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from app.core.database import get_pool
 from app.core.elasticsearch import get_es_client
+from app.core.ncbi_taxonomy import batch_taxid_lookup
 
 router = APIRouter()
 
@@ -30,6 +32,26 @@ async def get_analysis_results(job_id: UUID):
     if not rows:
         raise HTTPException(status_code=404, detail="Resultados não encontrados")
     return [_serialize_row(dict(r)) for r in rows]
+
+
+class TaxonomyEnrichRequest(BaseModel):
+    names: list[str]
+
+
+@router.post("/taxonomy/enrich")
+async def enrich_taxonomy(body: TaxonomyEnrichRequest):
+    """
+    Busca TaxID e lineage NCBI para lista de nomes taxonômicos.
+    Aceita strings SILVA/UNITE com prefixos (k__, p__, etc.).
+    Máximo de 50 nomes por chamada.
+    """
+    if not body.names:
+        raise HTTPException(status_code=422, detail="Lista de nomes não pode ser vazia.")
+    try:
+        results = await batch_taxid_lookup(body.names)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao consultar NCBI Taxonomy: {e}")
+    return {"results": results, "total": len(results)}
 
 
 @router.get("/search/degs")

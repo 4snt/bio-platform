@@ -1,9 +1,11 @@
 import re
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 
 from app.core.pg_storage import upload_lo
 from app.core.config import settings
+from app.core.ports import get_source, list_sources
 from app.domain.sample.services import SampleParser
 from app.domain.sample.entities import Sample
 from app.infrastructure.repositories.pg_sample_repo import PgSampleRepository
@@ -145,6 +147,98 @@ async def artifact_upload(
         )
 
     return {"oid": oid, "project_id": str(project_id)}
+
+
+class SraImportRequest(BaseModel):
+    accession: str
+    project_id: UUID
+    treatment_group: str
+    replicate: int
+    source: str = "sra"
+
+
+@router.get("/fastq-sources")
+async def fastq_sources():
+    """Lista repositórios de FASTQs disponíveis."""
+    return {"sources": list_sources()}
+
+
+@router.get("/sra-preview")
+async def sra_preview(accession: str, source: str = "sra"):
+    """Retorna metadados do accession sem fazer download (verificação prévia)."""
+    accession = accession.strip().upper()
+    try:
+        adapter = get_source(source)
+        meta = await adapter.fetch_metadata(accession)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return meta
+
+
+@router.post("/import-sra")
+async def import_sra(body: SraImportRequest):
+    """
+    Importa par de FASTQs de um repositório externo (source) via accession.
+    Por padrão usa NCBI SRA / ENA. Fontes adicionais são adicionadas no registry
+    em app/core/ports.py sem alterar este endpoint.
+    """
+    accession = body.accession.strip().upper()
+
+    project = await project_repo.get_by_id(body.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    try:
+        adapter = get_source(body.source)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    try:
+        pair = await adapter.download_pair(accession, _MAX_BYTES)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao importar de '{body.source}': {e}")
+
+    filename = f"{pair.filename_stem}_1.fastq.gz"
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            r1_oid = await conn.fetchval("SELECT lo_create(0)")
+            await conn.execute("SELECT lo_put($1, 0, $2)", r1_oid, pair.r1)
+            r2_oid = await conn.fetchval("SELECT lo_create(0)")
+            await conn.execute("SELECT lo_put($1, 0, $2)", r2_oid, pair.r2)
+
+            sample = Sample(
+                project_id=body.project_id,
+                filename=filename,
+                treatment_group=body.treatment_group,
+                replicate=body.replicate,
+                fastq_r1_oid=r1_oid,
+                fastq_r2_oid=r2_oid,
+            )
+            await conn.execute(
+                """
+                INSERT INTO samples
+                  (id, project_id, filename, treatment_group, replicate, fastq_r1_oid, fastq_r2_oid)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
+                sample.id, sample.project_id, sample.filename,
+                sample.treatment_group, sample.replicate,
+                sample.fastq_r1_oid, sample.fastq_r2_oid,
+            )
+
+    return {
+        "sample_id":       str(sample.id),
+        "accession":       accession,
+        "source":          body.source,
+        "treatment_group": sample.treatment_group,
+        "replicate":       sample.replicate,
+        "metadata":        pair.metadata,
+    }
 
 
 @router.get("/{project_id}/artifacts")

@@ -17,6 +17,10 @@ class Project:
     id: UUID = field(default_factory=uuid4)
     status: str = "active"
     description: str = ""
+    bioproject_accession: str | None = None
+    created_by: UUID | None = None
+    author_name: str | None = None
+    author_avatar_url: str | None = None
     analyses: list[ProjectAnalysis] = field(default_factory=list)
 
 
