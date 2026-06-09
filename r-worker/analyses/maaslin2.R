@@ -1,11 +1,7 @@
 run_maaslin2 <- function(payload, con) {
   library(Maaslin2)
 
-  phyloseq_obj <- minio_download_rds(
-    bucket     = "pipeline-artifacts",
-    key        = payload$phyloseq_key,
-    local_path = tempfile(fileext = ".rds")
-  )
+  phyloseq_obj <- pg_download_rds(con, payload$phyloseq_oid)
 
   features  <- as.data.frame(t(phyloseq::otu_table(phyloseq_obj)))
   metadata  <- as.data.frame(phyloseq::sample_data(phyloseq_obj))

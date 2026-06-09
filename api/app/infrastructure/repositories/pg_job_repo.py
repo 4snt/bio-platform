@@ -10,11 +10,13 @@ class PgJobRepository:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO pipeline_jobs (id, project_id, job_type, status, payload)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO pipeline_jobs
+                  (id, project_id, job_type, status, payload, phyloseq_oid)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 """,
                 job.id, job.project_id, job.job_type,
                 job.status.value, json.dumps(job.payload),
+                job.phyloseq_oid,
             )
 
     async def list_by_project(self, project_id: UUID) -> list[dict]:

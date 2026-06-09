@@ -2,11 +2,7 @@ run_deseq2 <- function(payload, con) {
   library(DESeq2)
   library(phyloseq)
 
-  ps <- minio_download_rds(
-    bucket     = "pipeline-artifacts",
-    key        = payload$phyloseq_key,
-    local_path = tempfile(fileext = ".rds")
-  )
+  ps <- pg_download_rds(con, payload$phyloseq_oid)
 
   count_matrix <- as(otu_table(ps), "matrix")
   if (!taxa_are_rows(ps)) count_matrix <- t(count_matrix)

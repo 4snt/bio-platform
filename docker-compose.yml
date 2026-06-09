@@ -32,23 +32,6 @@ services:
       timeout: 10s
       retries: 12
 
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: changeme
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     build: ./api
     ports:
@@ -58,8 +41,6 @@ services:
       postgres:
         condition: service_healthy
       elasticsearch:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     volumes:
       - ./api:/app
@@ -74,10 +55,7 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
-      minio:
-        condition: service_healthy
 
 volumes:
   pg_data:
   es_data:
-  minio_data:

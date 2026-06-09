@@ -10,11 +10,7 @@ class Settings(BaseSettings):
 
     es_host: str = "http://localhost:9200"
 
-    minio_endpoint: str = "localhost:9000"
-    minio_public_endpoint: str = "localhost:9000"   # usado nas presigned URLs (acessível pelo browser)
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "changeme"
-    minio_secure: bool = False
+    max_upload_size_mb: int = 2048
 
     log_level: str = "info"
 
@@ -24,8 +20,6 @@ class Settings(BaseSettings):
     jwt_refresh_days: int = 7
     allowed_email_domain: str = "@ufvjm.edu.br"
 
-    # URLs públicas — usadas no CORS e nas presigned URLs expostas ao browser
-    # Ex: "https://api.meusite.com,http://localhost:3000"
     cors_origins: str = "http://localhost:3000"
 
     @property

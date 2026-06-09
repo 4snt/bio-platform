@@ -9,7 +9,8 @@ class PgSampleRepository:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO samples (id, project_id, filename, treatment_group, replicate, fastq_r1_key, fastq_r2_key)
+                INSERT INTO samples
+                  (id, project_id, filename, treatment_group, replicate, fastq_r1_oid, fastq_r2_oid)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """,
                 sample.id,
@@ -17,8 +18,8 @@ class PgSampleRepository:
                 sample.filename,
                 sample.treatment_group,
                 sample.replicate,
-                sample.fastq_r1_key,
-                sample.fastq_r2_key,
+                sample.fastq_r1_oid,
+                sample.fastq_r2_oid,
             )
 
     async def list_by_project(self, project_id: UUID) -> list[dict]:

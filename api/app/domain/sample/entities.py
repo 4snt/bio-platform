@@ -26,6 +26,6 @@ class Sample:
     filename: str
     treatment_group: str
     replicate: int
-    fastq_r1_key: str
-    fastq_r2_key: str
+    fastq_r1_oid: int
+    fastq_r2_oid: int
     id: UUID = field(default_factory=uuid4)

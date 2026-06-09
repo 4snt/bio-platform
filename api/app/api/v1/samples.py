@@ -1,56 +1,43 @@
 import re
 from uuid import UUID
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 
-from app.core.minio import generate_presigned_upload, list_objects
+from app.core.pg_storage import upload_lo
+from app.core.config import settings
 from app.domain.sample.services import SampleParser
 from app.domain.sample.entities import Sample
 from app.infrastructure.repositories.pg_sample_repo import PgSampleRepository
 from app.infrastructure.repositories.pg_project_repo import PgProjectRepository
+from app.core.database import get_pool
 
 router = APIRouter()
-parser      = SampleParser()
-sample_repo = PgSampleRepository()
+parser       = SampleParser()
+sample_repo  = PgSampleRepository()
 project_repo = PgProjectRepository()
 
-
-class ArtifactUploadRequest(BaseModel):
-    filename: str   # ex: "phyloseq.rds" ou "phyloseq_fungi.rds"
-    project_id: UUID
+_MAX_BYTES = settings.max_upload_size_mb * 1024 * 1024
 
 
-class PresignedPairRequest(BaseModel):
-    r1_filename: str
-    project_id: UUID
+@router.post("/upload-pair")
+async def upload_pair(
+    r1: UploadFile = File(...),
+    r2: UploadFile = File(...),
+    project_id: UUID = Form(...),
+):
+    filename = r1.filename or ""
 
-
-class ConfirmPairRequest(BaseModel):
-    project_id: UUID
-    r1_key: str
-    r2_key: str
-    r1_filename: str
-
-
-@router.post("/presigned-pair")
-async def get_presigned_pair(body: PresignedPairRequest):
-    filename = body.r1_filename
-
-    # Validação: deve ser um arquivo R1
     if not re.search(r'_R1[_.]', filename):
         raise HTTPException(
             status_code=422,
             detail="Arquivo deve ser o R1 do par (deve conter _R1_ no nome).",
         )
 
-    # Parse do filename
     try:
         parsed = parser.parse(filename)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Busca projeto para validar marcador e obter code
-    project = await project_repo.get_by_id(body.project_id)
+    project = await project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
@@ -63,18 +50,50 @@ async def get_presigned_pair(body: PresignedPairRequest):
             ),
         )
 
-    # Deriva R2
-    r2_filename = re.sub(r'_R1(_\d+\.fastq)', r'_R2\1', filename)
-    if r2_filename == filename:
-        r2_filename = re.sub(r'_R1(\.fastq)', r'_R2\1', filename)
+    r1_bytes = await r1.read()
+    r2_bytes = await r2.read()
 
-    # Monta chaves no MinIO usando o code do projeto
-    r1_key = f"{project.code}/{filename}"
-    r2_key = f"{project.code}/{r2_filename}"
+    if len(r1_bytes) > _MAX_BYTES or len(r2_bytes) > _MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Arquivo excede o limite de {settings.max_upload_size_mb} MB.",
+        )
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            r1_oid = await conn.fetchval("SELECT lo_create(0)")
+            await conn.execute("SELECT lo_put($1, 0, $2)", r1_oid, r1_bytes)
+            r2_oid = await conn.fetchval("SELECT lo_create(0)")
+            await conn.execute("SELECT lo_put($1, 0, $2)", r2_oid, r2_bytes)
+
+            sample = Sample(
+                project_id=project_id,
+                filename=filename,
+                treatment_group=parsed.treatment_group,
+                replicate=parsed.replicate,
+                fastq_r1_oid=r1_oid,
+                fastq_r2_oid=r2_oid,
+            )
+            await conn.execute(
+                """
+                INSERT INTO samples
+                  (id, project_id, filename, treatment_group, replicate, fastq_r1_oid, fastq_r2_oid)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
+                sample.id,
+                sample.project_id,
+                sample.filename,
+                sample.treatment_group,
+                sample.replicate,
+                sample.fastq_r1_oid,
+                sample.fastq_r2_oid,
+            )
 
     return {
-        "r1": {"upload_url": generate_presigned_upload("fastq-raw", r1_key), "key": r1_key},
-        "r2": {"upload_url": generate_presigned_upload("fastq-raw", r2_key), "key": r2_key},
+        "sample_id":       str(sample.id),
+        "treatment_group": sample.treatment_group,
+        "replicate":       sample.replicate,
         "parsed": {
             "marker_type":     parsed.marker_type,
             "sample_number":   parsed.sample_number,
@@ -85,70 +104,78 @@ async def get_presigned_pair(body: PresignedPairRequest):
     }
 
 
-@router.post("/confirm-pair")
-async def confirm_pair(body: ConfirmPairRequest):
-    try:
-        parsed = parser.parse(body.r1_filename)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    sample = Sample(
-        project_id=body.project_id,
-        filename=body.r1_filename,
-        treatment_group=parsed.treatment_group,
-        replicate=parsed.replicate,
-        fastq_r1_key=body.r1_key,
-        fastq_r2_key=body.r2_key,
-    )
-
-    try:
-        await sample_repo.save(sample)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao salvar amostra: {e}")
-
-    return {
-        "sample_id":       str(sample.id),
-        "treatment_group": sample.treatment_group,
-        "replicate":       sample.replicate,
-    }
-
-
-@router.post("/artifact-upload-url")
-async def artifact_upload_url(body: ArtifactUploadRequest):
-    """Gera presigned URL para upload de arquivo .rds para o bucket pipeline-artifacts."""
-    if not body.filename.endswith(".rds"):
+@router.post("/artifact-upload")
+async def artifact_upload(
+    file: UploadFile = File(...),
+    project_id: UUID = Form(...),
+):
+    if not (file.filename or "").endswith(".rds"):
         raise HTTPException(status_code=422, detail="Apenas arquivos .rds são aceitos.")
 
-    project = await project_repo.get_by_id(body.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
-
-    key = f"{project.code}/{body.filename}"
-    url = generate_presigned_upload("pipeline-artifacts", key)
-    return {
-        "upload_url": url,
-        "key": f"pipeline-artifacts/{key}",
-        "bucket": "pipeline-artifacts",
-        "object_key": key,
-    }
-
-
-@router.get("/{project_id}/artifacts")
-async def list_artifacts(project_id: UUID):
-    """Lista artefatos disponíveis no MinIO para o projeto (phyloseq.rds, etc.)."""
     project = await project_repo.get_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    prefix = f"{project.code}/"
-    keys   = list_objects("pipeline-artifacts", prefix)
+    data = await file.read()
+    if len(data) > _MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Arquivo excede o limite de {settings.max_upload_size_mb} MB.",
+        )
 
-    # Caminho padrão que o QIIME2 vai gerar
-    default_key = f"pipeline-artifacts/{project.code}/phyloseq.rds"
+    oid = await upload_lo(data)
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE pipeline_jobs
+            SET phyloseq_oid = $1
+            WHERE project_id = $2
+              AND status IN ('queued', 'done')
+              AND id = (
+                SELECT id FROM pipeline_jobs
+                WHERE project_id = $2
+                ORDER BY created_at DESC
+                LIMIT 1
+              )
+            """,
+            oid,
+            project_id,
+        )
+
+    return {"oid": oid, "project_id": str(project_id)}
+
+
+@router.get("/{project_id}/artifacts")
+async def list_artifacts(project_id: UUID):
+    project = await project_repo.get_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, phyloseq_oid, created_at
+            FROM pipeline_jobs
+            WHERE project_id = $1 AND phyloseq_oid IS NOT NULL
+            ORDER BY created_at DESC
+            """,
+            project_id,
+        )
+
+    artifacts = [
+        {
+            "job_id":       str(r["id"]),
+            "phyloseq_oid": r["phyloseq_oid"],
+            "created_at":   r["created_at"].isoformat() if r["created_at"] else None,
+        }
+        for r in rows
+    ]
 
     return {
-        "default_key": default_key,
-        "available":   [f"pipeline-artifacts/{k}" for k in keys],
+        "available":    artifacts,
         "project_code": str(project.code),
     }
 

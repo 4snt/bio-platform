@@ -18,6 +18,7 @@ class EnqueueRequest(BaseModel):
     project_id: UUID
     job_type: str
     payload: dict = {}
+    phyloseq_oid: int | None = None
 
 
 @router.post("/enqueue")
@@ -32,6 +33,7 @@ async def enqueue_job(body: EnqueueRequest):
         project_id=body.project_id,
         job_type=body.job_type,
         payload=body.payload,
+        phyloseq_oid=body.phyloseq_oid,
     )
 
     try:

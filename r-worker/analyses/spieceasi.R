@@ -1,11 +1,7 @@
 run_spieceasi <- function(payload, con) {
   library(SpiecEasi)
 
-  phyloseq_obj <- minio_download_rds(
-    bucket     = "pipeline-artifacts",
-    key        = payload$phyloseq_key,
-    local_path = tempfile(fileext = ".rds")
-  )
+  phyloseq_obj <- pg_download_rds(con, payload$phyloseq_oid)
 
   se <- spiec.easi(
     phyloseq_obj,

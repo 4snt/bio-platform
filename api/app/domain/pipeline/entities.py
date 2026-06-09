@@ -17,4 +17,5 @@ class PipelineJob:
     payload: dict
     id: UUID = field(default_factory=uuid4)
     status: JobStatus = JobStatus.QUEUED
+    phyloseq_oid: int | None = None
     error_msg: str | None = None

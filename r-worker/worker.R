@@ -1,6 +1,6 @@
 source("utils/pg_helpers.R")
 source("utils/es_helpers.R")
-source("utils/minio_helpers.R")
+source("utils/pg_storage.R")
 source("analyses/deseq2.R")
 source("analyses/ancombc.R")
 source("analyses/maaslin2.R")
@@ -14,7 +14,7 @@ con <- pg_connect()
 DBI::dbExecute(con, "LISTEN new_job")
 message("[worker] Aguardando jobs...")
 
-# Análises que exigem phyloseq_key no payload
+# Análises que exigem phyloseq_oid na coluna pipeline_jobs
 NEEDS_PHYLOSEQ <- c("deseq2", "ancombc2", "maaslin2", "spieceasi", "random_forest", "gsea", "funguild", "picrust2")
 
 process_job <- function(job) {
@@ -23,12 +23,15 @@ process_job <- function(job) {
   payload  <- jsonlite::fromJSON(job$payload)
 
   # Valida payload antes de rodar
-  if (job_type %in% NEEDS_PHYLOSEQ && (is.null(payload$phyloseq_key) || nchar(payload$phyloseq_key) == 0)) {
+  phyloseq_oid <- DBI::dbGetQuery(con,
+    sprintf("SELECT phyloseq_oid FROM pipeline_jobs WHERE id = '%s'", job_id))[[1]]
+  if (job_type %in% NEEDS_PHYLOSEQ && (is.null(phyloseq_oid) || is.na(phyloseq_oid))) {
     pg_set_status(con, job_id, "failed",
-      error_msg = paste0("payload inválido: 'phyloseq_key' é obrigatório para análise '", job_type, "'"))
-    message(sprintf("[worker] Job %s rejeitado — phyloseq_key ausente", job_id))
+      error_msg = paste0("payload inválido: 'phyloseq_oid' é obrigatório para análise '", job_type, "'"))
+    message(sprintf("[worker] Job %s rejeitado — phyloseq_oid ausente", job_id))
     return(invisible(NULL))
   }
+  payload$phyloseq_oid <- phyloseq_oid
 
   message(sprintf("[worker] Iniciando job %s — tipo: %s", job_id, job_type))
   pg_set_status(con, job_id, "running")
