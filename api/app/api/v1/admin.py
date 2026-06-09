@@ -1,6 +1,6 @@
 """Admin-only endpoints: user management and invite management."""
 import uuid
-
+import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
@@ -10,6 +10,43 @@ from app.core.database import get_pool
 
 router = APIRouter()
 
+@router.get("/debug/db")
+async def debug_db():
+    """Diagnostic endpoint to check DB schema and migrations."""
+    pool = get_pool()
+    results = {}
+    
+    async with pool.acquire() as conn:
+        # Check columns in 'projects'
+        projects_cols = await conn.fetch(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'projects'"
+        )
+        results["projects_columns"] = [r["column_name"] for r in projects_cols]
+        
+        # Check columns in 'users'
+        users_cols = await conn.fetch(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+        )
+        results["users_columns"] = [r["column_name"] for r in users_cols]
+        
+        # Check schema_migrations table
+        try:
+            migrated = await conn.fetch("SELECT filename FROM schema_migrations")
+            results["applied_migrations"] = [r["filename"] for r in migrated]
+        except Exception as e:
+            results["schema_migrations_error"] = str(e)
+
+    # Check migrations folder
+    # admin.py is in app/api/v1/
+    # dirname(__file__) is app/api/v1
+    # dirname(dirname(dirname(__file__))) is app/
+    migrations_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "migrations")
+    results["migrations_dir"] = migrations_path
+    results["migrations_dir_exists"] = os.path.exists(migrations_path)
+    if os.path.exists(migrations_path):
+        results["migration_files"] = os.listdir(migrations_path)
+        
+    return results
 
 # ---------------------------------------------------------------------------
 # Request / Response schemas
