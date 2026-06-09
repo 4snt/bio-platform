@@ -11,6 +11,7 @@ from app.core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print(">>> RIZOMA API VERSION: 5 (Emergency Fix)", flush=True)
     await init_db_pool()
     await run_migrations()
     await init_es_client()
