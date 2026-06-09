@@ -11,6 +11,18 @@ async def init_db_pool() -> None:
         min_size=2,
         max_size=10,
     )
+    # Emergency repair: ensure critical columns exist before the app starts fully.
+    # This is a fail-safe for the migration runner.
+    try:
+        async with _pool.acquire() as conn:
+            print(">>> [database] Running emergency schema repair...", flush=True)
+            await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;")
+            await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';")
+            await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;")
+            await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS bioproject_accession VARCHAR(20);")
+            print(">>> [database] Emergency repair complete.", flush=True)
+    except Exception as e:
+        print(f"!!! [database] Emergency repair failed (this might be normal if columns exist): {e}", flush=True)
 
 
 async def close_db_pool() -> None:
